@@ -29,7 +29,7 @@
       "id": "F-04", "phase": "P1", "title": "추첨 엔진(서버)",
       "desc": "재고 가중 추첨 + FOR UPDATE 행 잠금 + 감사 로그(seed commit-reveal)",
       "acceptance": ["동시 20요청 테스트에서 재고 음수 0건", "모든 draw에 seed_hash/seed 기록", "코인 부족 시 402 및 원장 무변화"],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "F-05", "phase": "P1", "title": "3D 스핀/리빌 씬",

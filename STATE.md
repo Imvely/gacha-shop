@@ -18,4 +18,5 @@ P1 (MVP) — 프로젝트 셋업 단계. 아직 앱 코드 없음 (기획/스키
 - (없음)
 
 ## 마지막 세션 요약
-- 2026-07-17: Claude Code 하네스 구축 (commands/skills/hooks/settings, worklog 체계)
+- 2026-07-17: Claude Code 하네스 구축 (commands/skills/hooks/settings, worklog 체계),
+  GitHub 원격 연결(Imvely/gacha-shop) 및 첫 푸쉬 완료

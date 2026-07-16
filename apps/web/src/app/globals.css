@@ -1,26 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 밤의 아케이드 — 짙은 보라밤 + 캡슐 핑크 */
+  --background: #14121f;
+  --surface: #201d33;
+  --surface-2: #2a2644;
+  --line: #37325c;
+  --foreground: #f2f0fa;
+  --muted: #9d97bd;
+  --pong: #ff5fa2;
+  --coin: #ffd166;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-muted: var(--muted);
+  --color-pong: var(--pong);
+  --color-coin: var(--coin);
+  --font-sans: var(--font-plex-kr);
+  --font-display: var(--font-jua);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-plex-kr), sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

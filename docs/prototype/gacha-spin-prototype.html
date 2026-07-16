@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<!-- 모바일에서 확대/축소 없이 앱처럼 보이게 하는 뷰포트 설정 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PONG! — 온라인 가챠 스핀 프로토타입</title>
+<style>
+/* ============================================================
+   디자인 토큰: 색·크기를 CSS 변수로 한곳에 모아두면
+   나중에 브랜드 컬러를 바꿀 때 이 블록만 고치면 된다.
+   컨셉: "밤의 오락실" — 딥 인디고 밤하늘 + 네온 파스텔 머신
+   ============================================================ */
+:root{
+  --bg-top:#171233;      /* 밤하늘 위쪽 (짙은 인디고) */
+  --bg-bottom:#2E2260;   /* 밤하늘 아래쪽 (보랏빛) */
+  --pink:#FF5D8F;        /* 브랜드 핑크 (머신 바디) */
+  --mint:#59E3C2;        /* 포인트 민트 */
+  --butter:#FFD166;      /* 시크릿 골드 */
+  --ink:#1F2430;         /* 어두운 글자색 (밝은 카드 위) */
+  --paper:#FFF9F4;       /* 카드 배경 (따뜻한 화이트) */
+  --hud:#FFFFFF;         /* HUD 글자색 */
+  /* 등급 컬러 — CLAUDE.md의 rarity 토큰과 반드시 일치시킬 것 */
+  --r-normal:#9AA3B2; --r-rare:#5BA8FF; --r-epic:#B07CFF; --r-secret:#FFC24D;
+}
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; overflow:hidden;
+  font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bottom) 100%);
+  color:var(--hud); user-select:none; }
+
+/* 3D 캔버스: 화면 전체를 덮되, 배경 그라데이션이 비치도록 투명 렌더링 */
+#stage{ position:fixed; inset:0; touch-action:none; } /* touch-action:none → 드래그가 스크롤로 새지 않게 */
+
+/* ---------- 상단 HUD ---------- */
+.hud{ position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+  align-items:center; padding:14px 16px; z-index:10; pointer-events:none; }
+.logo{ font-size:22px; font-weight:900; letter-spacing:1px;
+  text-shadow:0 2px 0 rgba(0,0,0,.35), 0 0 18px rgba(255,93,143,.55); }
+.logo em{ font-style:normal; color:var(--mint); }
+.coin{ pointer-events:auto; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(8px); border-radius:999px; padding:8px 14px; font-weight:800; font-size:14px;
+  display:flex; gap:6px; align-items:center; }
+.coin b{ color:var(--butter); font-size:16px; }
+
+/* ---------- 머신 정보 칩 (잔여 게이지 + 확률 버튼) ---------- */
+.chip{ position:fixed; top:64px; left:16px; z-index:10; width:min(230px,60vw);
+  background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(8px); border-radius:16px; padding:12px 14px; }
+.chip h2{ font-size:14px; font-weight:800; margin-bottom:2px; }
+.chip .series{ font-size:11px; color:rgba(255,255,255,.65); margin-bottom:8px; }
+.gauge{ height:8px; border-radius:999px; background:rgba(255,255,255,.15); overflow:hidden; }
+.gauge i{ display:block; height:100%; border-radius:999px;
+  background:linear-gradient(90deg,var(--mint),var(--butter)); transition:width .5s ease; }
+.gauge-label{ font-size:11px; margin-top:6px; color:rgba(255,255,255,.85); display:flex; justify-content:space-between; }
+.odds-btn{ margin-top:10px; width:100%; font-size:12px; font-weight:700; color:var(--hud);
+  background:transparent; border:1px dashed rgba(255,255,255,.35); border-radius:10px; padding:7px; cursor:pointer; }
+.odds-btn:hover{ background:rgba(255,255,255,.08); }
+
+/* ---------- 하단 액션 바 ---------- */
+.bar{ position:fixed; bottom:0; left:0; right:0; z-index:10; padding:14px 16px calc(16px + env(safe-area-inset-bottom));
+  display:flex; gap:10px; justify-content:center; }
+.btn{ border:none; cursor:pointer; font-weight:900; border-radius:18px; padding:16px 22px; font-size:16px;
+  transition:transform .12s ease, filter .12s ease; }
+.btn:active{ transform:scale(.95); }
+.btn:disabled{ filter:grayscale(.8) brightness(.7); cursor:not-allowed; }
+.btn-spin{ flex:1; max-width:280px; color:#fff;
+  background:linear-gradient(135deg,var(--pink),#FF8FB0);
+  box-shadow:0 6px 0 #C23A6B, 0 10px 26px rgba(255,93,143,.45); }
+.btn-ten{ color:var(--ink); background:linear-gradient(135deg,var(--butter),#FFE29A);
+  box-shadow:0 6px 0 #C79A2E, 0 10px 26px rgba(255,209,102,.35); }
+.btn small{ display:block; font-size:11px; font-weight:700; opacity:.8; margin-top:2px; }
+
+/* 안내 토스트 & 탭 힌트 */
+.toast{ position:fixed; left:50%; bottom:110px; transform:translateX(-50%); z-index:12;
+  background:rgba(0,0,0,.65); padding:9px 16px; border-radius:999px; font-size:13px; font-weight:700;
+  opacity:0; transition:opacity .3s; pointer-events:none; }
+.toast.show{ opacity:1; }
+.hint{ position:fixed; left:50%; transform:translateX(-50%); z-index:9; font-size:13px; font-weight:800;
+  color:var(--hud); text-shadow:0 0 12px rgba(89,227,194,.8); opacity:0; transition:opacity .3s; pointer-events:none;
+  animation:bob 1.2s ease-in-out infinite; }
+.hint.show{ opacity:1; }
+@keyframes bob{ 0%,100%{ margin-top:0 } 50%{ margin-top:6px } }
+
+/* ---------- 결과 리빌 카드 (DOM 오버레이) ---------- */
+.overlay{ position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center;
+  background:rgba(15,10,40,.62); backdrop-filter:blur(6px); }
+.overlay.show{ display:flex; animation:fadein .25s ease; }
+@keyframes fadein{ from{opacity:0} to{opacity:1} }
+.card{ width:min(320px,86vw); background:var(--paper); color:var(--ink); border-radius:24px;
+  padding:26px 22px 20px; text-align:center; position:relative; overflow:hidden;
+  animation:pop .45s cubic-bezier(.2,1.6,.4,1); }
+@keyframes pop{ from{ transform:scale(.5) rotate(-4deg); opacity:0 } to{ transform:scale(1) rotate(0); opacity:1 } }
+.card .rarity{ display:inline-block; font-size:11px; font-weight:900; letter-spacing:2px;
+  padding:4px 12px; border-radius:999px; color:#fff; margin-bottom:12px; }
+.card .art{ font-size:72px; line-height:1.1; margin:6px 0 10px;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,.18)); }
+.card h3{ font-size:20px; font-weight:900; margin-bottom:4px; }
+.card .series{ font-size:12px; color:#8a8f9c; margin-bottom:10px; }
+.card .price{ font-size:13px; font-weight:800; color:#3b2f63;
+  background:#F1EDFF; border-radius:10px; padding:8px; margin-bottom:14px; }
+.card .actions{ display:flex; gap:8px; }
+.card .actions button{ flex:1; border:none; border-radius:12px; padding:12px; font-weight:800; cursor:pointer; font-size:14px; }
+.a-again{ background:var(--pink); color:#fff; }
+.a-close{ background:#ECEDF2; color:var(--ink); }
+/* 등급별 카드 상단 리본 빛 */
+.card::before{ content:""; position:absolute; top:-60px; left:50%; transform:translateX(-50%);
+  width:220px; height:120px; border-radius:50%; filter:blur(30px); opacity:.55; }
+.card.normal::before{ background:var(--r-normal);} .card.rare::before{ background:var(--r-rare);}
+.card.epic::before{ background:var(--r-epic);}   .card.secret::before{ background:var(--r-secret);}
+.badge-normal{background:var(--r-normal)} .badge-rare{background:var(--r-rare)}
+.badge-epic{background:var(--r-epic)} .badge-secret{background:linear-gradient(90deg,#E8A93C,var(--r-secret))}
+
+/* 시크릿 전용: 화면 흔들림 + 골드 컨페티 */
+@keyframes shakeX{ 0%,100%{transform:translate(0)} 20%{transform:translate(-6px,2px)} 40%{transform:translate(6px,-2px)} 60%{transform:translate(-4px,1px)} 80%{transform:translate(4px,-1px)} }
+.shake{ animation:shakeX .45s ease; }
+.confetti{ position:fixed; inset:0; pointer-events:none; z-index:25; overflow:hidden; }
+.confetti i{ position:absolute; top:-12px; width:8px; height:14px; border-radius:2px; opacity:.95;
+  animation:fall linear forwards; }
+@keyframes fall{ to{ transform:translateY(110vh) rotate(720deg); } }
+
+/* ---------- 10연 결과 그리드 ---------- */
+.grid{ width:min(360px,90vw); background:var(--paper); color:var(--ink); border-radius:24px; padding:20px;
+  animation:pop .45s cubic-bezier(.2,1.6,.4,1); }
+.grid h3{ text-align:center; font-weight:900; margin-bottom:14px; }
+.grid .cells{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:14px; }
+.cell{ aspect-ratio:1; border-radius:14px; display:flex; align-items:center; justify-content:center;
+  font-size:26px; background:#F3F1FA; border:2px solid transparent; transform:scale(0); animation:cellin .3s forwards; }
+@keyframes cellin{ to{ transform:scale(1) } }
+.cell.rare{ border-color:var(--r-rare)} .cell.epic{ border-color:var(--r-epic)}
+.cell.secret{ border-color:var(--r-secret); box-shadow:0 0 14px rgba(255,194,77,.6); }
+
+/* ---------- 확률 모달 (실시간 재고 기반) ---------- */
+.odds{ width:min(340px,88vw); background:var(--paper); color:var(--ink); border-radius:24px; padding:22px;
+  max-height:72vh; overflow:auto; animation:pop .4s cubic-bezier(.2,1.6,.4,1); }
+.odds h3{ font-weight:900; margin-bottom:4px; }
+.odds .note{ font-size:11px; color:#8a8f9c; margin-bottom:14px; }
+.odds table{ width:100%; border-collapse:collapse; font-size:13px; }
+.odds td{ padding:8px 4px; border-bottom:1px solid #eee; }
+.odds td:last-child{ text-align:right; font-weight:800; }
+.dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+
+@media (prefers-reduced-motion: reduce){ /* 접근성: 모션 최소화 설정 존중 */
+  *{ animation-duration:.01s !important; transition-duration:.01s !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== 3D 무대: three.js가 이 안에 <canvas>를 만들어 넣는다 ===== -->
+<div id="stage"></div>
+
+<!-- ===== HUD (DOM 오버레이: 3D 위에 얹는 2D UI) ===== -->
+<div class="hud">
+  <div class="logo">PONG<em>!</em></div>
+  <div class="coin">🪙 <b id="coins">100</b> 코인</div>
+</div>
+
+<div class="chip">
+  <h2>몽글프렌즈 · 별밤 시리즈</h2>
+  <div class="series">자체 캐릭터 IP · 정품 실물 배송</div>
+  <div class="gauge"><i id="gaugeFill" style="width:100%"></i></div>
+  <div class="gauge-label"><span>남은 캡슐</span><b id="stockLabel">-</b></div>
+  <button class="odds-btn" id="oddsBtn">📊 확률 · 잔여 실시간 보기</button>
+</div>
+
+<div class="bar">
+  <button class="btn btn-spin" id="spinBtn">레버 돌리기 <small>10코인 · 드래그로도 가능</small></button>
+  <button class="btn btn-ten" id="tenBtn">10연 <small>90코인</small></button>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="hint" id="hint">캡슐을 탭해서 열어보세요!</div>
+
+<!-- 결과 카드 / 10연 그리드 / 확률 모달은 같은 overlay 틀을 재사용 -->
+<div class="overlay" id="overlay"></div>
+<div class="confetti" id="confetti"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================================
+   PART A. "서버" 시뮬레이션 — 실제 서비스에서는 이 블록 전체가 FastAPI로 이동한다.
+   프론트는 절대 결과를 결정하지 않는다는 원칙(CLAUDE.md §2-1)을 보여주기 위해
+   추첨 로직을 UI 코드와 분리된 fakeServer 객체로 격리했다.
+   ============================================================================ */
+const fakeServer = (() => {
+  // machine_items 테이블에 해당: stock(남은 수량)이 곧 확률의 분자다.
+  const inventory = [
+    { id:1, name:"구름토끼 뭉이",   emoji:"🐰", rarity:"normal", price:4000, stock:30 },
+    { id:2, name:"푸딩고양이 냥푸", emoji:"🐱", rarity:"normal", price:4000, stock:30 },
+    { id:3, name:"별사탕 곰돌 코코",emoji:"🐻", rarity:"rare",   price:6000, stock:20 },
+    { id:4, name:"이슬 개구리 뿅",  emoji:"🐸", rarity:"rare",   price:6000, stock:12 },
+    { id:5, name:"오로라 유니콘 루", emoji:"🦄", rarity:"epic",   price:9000, stock:6 },
+    { id:6, name:"달토끼 문문 (시크릿)", emoji:"🌙", rarity:"secret", price:15000, stock:2 },
+  ];
+  const totalStock = () => inventory.reduce((s,i)=>s+i.stock,0);
+
+  // 가중 추첨: 0~총재고 사이 난수 r을 뽑아, 누적합이 r을 넘는 첫 아이템이 당첨.
+  // 실제 서버에서는 이 직전에 SELECT ... FOR UPDATE로 행을 잠근다(동시성 방어).
+  function drawOne(){
+    const total = totalStock();
+    if (total === 0) return null;                       // 머신 품절
+    let r = Math.random() * total;                      // 실서버: 시드 기반 CSPRNG + 감사 로그
+    for (const item of inventory){
+      if (item.stock === 0) continue;
+      if (r < item.stock){ item.stock -= 1; return { ...item }; } // 재고 차감 = 확률도 즉시 변동
+      r -= item.stock;
+    }
+  }
+  return {
+    draw : (count=1) => Array.from({length:count}, drawOne).filter(Boolean),
+    odds : () => inventory.map(i => ({ ...i, pct: totalStock() ? (100*i.stock/totalStock()) : 0 })),
+    stock: totalStock, initial: 100,
+  };
+})();
+
+/* ============================================================================
+   PART B. three.js 3D 씬 — 검볼(구형 돔) 스타일 가챠 머신을 기본 도형만으로 조립
+   개념 계층: Scene(무대) ⊃ Mesh(물체=Geometry 모양 + Material 재질) / Light / Camera
+   매 프레임 renderer가 Camera 시점으로 Scene을 그린다(렌더 루프).
+   ============================================================================ */
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+
+// 원근 카메라: (시야각 42°, 화면비, 근평면, 원평면) — 사람 눈과 비슷한 원근감
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 1.9, 6.2);      // 머신을 약간 위에서 내려다보는 구도
+camera.lookAt(0, 1.25, 0);
+
+// alpha:true → 캔버스를 투명하게 만들어 CSS 밤하늘 그라데이션이 배경이 되게 함
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); // 고해상도 폰에서 GPU 과부하 방지 상한
+renderer.setSize(innerWidth, innerHeight);
+stage.appendChild(renderer.domElement);
+
+// ---- 조명: 은은한 전역광 + 태양광 + 네온 림라이트 2개 ----
+scene.add(new THREE.AmbientLight(0xffffff, .55));
+const key = new THREE.DirectionalLight(0xffffff, .85); key.position.set(3,6,4); scene.add(key);
+const rimP = new THREE.PointLight(0xFF5D8F, 1.1, 12); rimP.position.set(-3,2,2); scene.add(rimP);
+const rimM = new THREE.PointLight(0x59E3C2, .9, 12);  rimM.position.set(3,1,3);  scene.add(rimM);
+
+// ---- 재질 팔레트 (Standard = 물리 기반: 빛을 사실적으로 반사) ----
+const M = {
+  pink : new THREE.MeshStandardMaterial({ color:0xFF5D8F, roughness:.35, metalness:.05 }),
+  cream: new THREE.MeshStandardMaterial({ color:0xFFF3E6, roughness:.5 }),
+  dark : new THREE.MeshStandardMaterial({ color:0x2A2144, roughness:.6 }),
+  mint : new THREE.MeshStandardMaterial({ color:0x59E3C2, roughness:.4 }),
+  glass: new THREE.MeshPhongMaterial({ color:0xBFD8FF, transparent:true, opacity:.16,
+          shininess:120, side:THREE.DoubleSide }), // 유리 돔: 반투명 퐁 재질로 가볍게 표현
+};
+
+const machine = new THREE.Group();       // 그룹: 여러 메시를 한 덩어리로 묶어 함께 이동/흔들기
+scene.add(machine);
+
+// 바디(원기둥) + 받침 + 돔 + 돔 테두리 링
+const body = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.2, 1.5, 40), M.pink);
+body.position.y = .75; machine.add(body);
+const foot = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.35, .22, 40), M.dark);
+foot.position.y = .11; machine.add(foot);
+const dome = new THREE.Mesh(new THREE.SphereGeometry(1.12, 40, 28, 0, Math.PI*2, 0, Math.PI*.58), M.glass);
+dome.position.y = 1.62; machine.add(dome);
+const ring = new THREE.Mesh(new THREE.TorusGeometry(1.09, .06, 14, 48), M.cream);
+ring.rotation.x = Math.PI/2; ring.position.y = 1.62; machine.add(ring);
+
+// 배출구(칩 모양 홈) + 트레이: 캡슐이 떨어져 나올 자리
+const chute = new THREE.Mesh(new THREE.CircleGeometry(.26, 24), M.dark);
+chute.position.set(0, .62, 1.181); machine.add(chute);   // 바디 표면보다 살짝 앞(z)으로
+const tray = new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,.14,28,1,false,0,Math.PI), M.mint);
+tray.rotation.y = -Math.PI/2; tray.position.set(0,.28,1.28); machine.add(tray);
+
+// 손잡이(노브): 원판 + 막대. 드래그하면 knob.rotation.z가 돌아간다.
+const knob = new THREE.Group();
+const knobBase = new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.12,28), M.cream);
+knobBase.rotation.x = Math.PI/2; knob.add(knobBase);
+const handle = new THREE.Mesh(new THREE.BoxGeometry(.62,.16,.14), M.mint);
+handle.position.z = .07; knob.add(handle);
+knob.position.set(0, 1.0, 1.2); machine.add(knob);
+
+// ---- 돔 속 캡슐 무더기: 위 반구(색) + 아래 반구(흰색)를 붙인 2톤 캡슐 ----
+const capsuleColors = [0xFF5D8F,0x59E3C2,0xFFD166,0x5BA8FF,0xB07CFF];
+function makeCapsule(color, r=.17){
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.SphereGeometry(r,18,12,0,Math.PI*2,0,Math.PI/2),
+    new THREE.MeshStandardMaterial({ color, roughness:.3 }));
+  const bot = new THREE.Mesh(new THREE.SphereGeometry(r,18,12,0,Math.PI*2,Math.PI/2,Math.PI/2),
+    new THREE.MeshStandardMaterial({ color:0xFFFDF7, roughness:.35 }));
+  g.add(top,bot); return g;
+}
+const pile = [];                                   // 렌더 루프에서 흔들 캡슐 목록
+for (let i=0;i<24;i++){
+  const c = makeCapsule(capsuleColors[i%capsuleColors.length], .155);
+  const a = Math.random()*Math.PI*2, rad = Math.random()*.75; // 돔 안 원판 위 무작위 배치
+  c.position.set(Math.cos(a)*rad, 1.7 + Math.random()*.35, Math.sin(a)*rad);
+  c.rotation.set(Math.random()*3, Math.random()*3, 0);
+  c.userData.base = c.position.clone();            // 흔들기 기준 위치 저장
+  machine.add(c); pile.push(c);
+}
+
+// 배출 연출용 캡슐(평소엔 숨김) — 결과 등급 색으로 갈아입고 등장
+const dropCap = makeCapsule(0xFF5D8F, .2); dropCap.visible = false; scene.add(dropCap);
+
+// 배경 별가루 파티클: BufferGeometry에 점 300개를 흩뿌림
+{
+  const n=300, pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){ pos[i*3]=(Math.random()-.5)*16; pos[i*3+1]=Math.random()*9; pos[i*3+2]=-2-Math.random()*8; }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color:0xCFE2FF, size:.05, transparent:true, opacity:.7 })));
+}
+
+/* ============================================================================
+   PART C. 상태 머신 & 애니메이션
+   idle → spinning(노브 회전+머신 진동) → dropping(캡슐 낙하 경로) → landed(탭 대기)
+        → opened(리빌 카드). 상태를 하나의 변수로 관리하면 중복 입력 버그가 사라진다.
+   ============================================================================ */
+let state = 'idle';
+let pendingResult = null;                     // "서버"가 준 결과 (연출은 항상 결과의 후행!)
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clock = new THREE.Clock();
+let spinT = 0, dropT = 0;
+const ease = t => 1-Math.pow(1-t,3);          // easeOutCubic: 끝에서 부드럽게 감속
+const bounce = t => {                          // 캡슐 착지 바운스용 이징
+  const n1=7.5625, d1=2.75;
+  if(t<1/d1) return n1*t*t;
+  if(t<2/d1) return n1*(t-=1.5/d1)*t+.75;
+  if(t<2.5/d1) return n1*(t-=2.25/d1)*t+.9375;
+  return n1*(t-=2.625/d1)*t+.984375;
+};
+
+// 낙하 경로: 돔 중심 → 바디 내부 → 배출구 → 트레이 (키프레임 보간)
+const path = [ new THREE.Vector3(0,1.55,0), new THREE.Vector3(0,.85,.7),
+               new THREE.Vector3(0,.62,1.25), new THREE.Vector3(0,.42,1.5) ];
+
+function animate(){
+  requestAnimationFrame(animate);                       // 브라우저 주사율에 맞춘 렌더 루프
+  const t = clock.getElapsedTime();
+
+  machine.rotation.y = Math.sin(t*.4)*.05;              // 살아있는 느낌의 미세한 아이들 회전
+  pile.forEach((c,i)=>{                                 // 캡슐 무더기: 평소엔 잔잔히, 스핀 중엔 요동
+    const amp = state==='spinning' && !reduced ? .09 : .015;
+    c.position.y = c.userData.base.y + Math.sin(t*6+i)*amp;
+    if(state==='spinning') c.rotation.x += .12;
+  });
+
+  if (state==='spinning'){
+    spinT += clock.getDelta ? 0.016 : 0.016;            // 프레임당 진행(단순화)
+    knob.rotation.z -= .22;                             // 노브가 빙글빙글
+    if(!reduced) machine.position.x = Math.sin(t*40)*.02; // 머신 부르르 진동
+    if (spinT > 1.1){ machine.position.x = 0; startDrop(); }
+  }
+  if (state==='dropping'){
+    dropT = Math.min(dropT + .02, 1);
+    // 경로 보간: 전체 진행도(dropT)를 구간 3개에 나눠 배치
+    const seg = dropT*3, i = Math.min(Math.floor(seg),2), f = seg - i;
+    const from = path[i], to = path[i+1];
+    dropCap.position.lerpVectors(from, to, i===2 ? bounce(f) : ease(f)); // 마지막 구간만 바운스
+    dropCap.rotation.x += .2; dropCap.rotation.z += .1;
+    if (dropT >= 1){ state='landed'; showHint(true); }
+  }
+  if (state==='landed'){ dropCap.rotation.y += .02;     // 탭 대기: 살짝 반짝이며 회전
+    dropCap.scale.setScalar(1 + Math.sin(t*5)*.04); }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', ()=>{                        // 화면 회전/리사이즈 대응
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ============================================================================
+   PART D. 인터랙션 — 버튼, 노브 드래그, 캡슐 탭, 사운드(WebAudio 합성음)
+   ============================================================================ */
+const $ = s => document.querySelector(s);
+let coins = 100;
+const rarityKo = { normal:'노멀', rare:'레어', epic:'에픽', secret:'시크릿' };
+
+// 작은 효과음: 오디오 파일 없이 오실레이터(발진기)로 '삑/뽁' 합성 — 용량 0
+let audioCtx;
+function beep(freq=600, dur=.07, type='square', vol=.05){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq; g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime+dur);
+    o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+
+function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600); }
+function showHint(on){ const h=$('#hint');
+  h.style.bottom = '38%'; h.classList.toggle('show', on); }
+function refreshHUD(){
+  $('#coins').textContent = coins;
+  const s = fakeServer.stock();
+  $('#stockLabel').textContent = `${s} / ${fakeServer.initial}`;
+  $('#gaugeFill').style.width = (100*s/fakeServer.initial) + '%';
+  $('#spinBtn').disabled = coins<10 || s===0;
+  $('#tenBtn').disabled  = coins<90 || s<10;
+  if (s===0) toast('이 머신은 완판! 다음 회차를 기다려주세요 🎉');
+}
+
+// --- 스핀 시작: ★서버 호출이 먼저, 연출은 그 다음 (원칙) ---
+function startSpin(mode='single'){
+  if (state!=='idle') return;
+  const cost = mode==='ten'?90:10, cnt = mode==='ten'?10:1;
+  if (coins < cost) return toast('코인이 부족해요 🥲');
+  if (fakeServer.stock() < cnt) return toast('남은 캡슐이 부족해요');
+  coins -= cost;
+  pendingResult = { mode, items: fakeServer.draw(cnt) };  // ← 실서비스: await POST /draws
+  refreshHUD();
+  state='spinning'; spinT=0; beep(520,.06); setTimeout(()=>beep(760,.06),120);
+}
+function startDrop(){
+  state='dropping'; dropT=0;
+  // 배출 캡슐을 결과 최고 등급 색으로 교체(레어일수록 낙하부터 티가 나게)
+  const best = pendingResult.items.reduce((a,b)=> rank(b.rarity)>rank(a.rarity)?b:a);
+  const col = { normal:0x9AA3B2, rare:0x5BA8FF, epic:0xB07CFF, secret:0xFFC24D }[best.rarity];
+  dropCap.children[0].material.color.setHex(col);
+  dropCap.visible = true; beep(300,.1,'sine');
+}
+const rank = r => ({normal:0,rare:1,epic:2,secret:3}[r]);
+
+// --- 노브 드래그: 포인터 이벤트로 수평 이동량만큼 노브 회전, 임계치 넘으면 스핀 ---
+let dragging=false, dragX=0, acc=0;
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if (state==='landed'){ openCapsule(); return; }       // 착지 상태에선 어디를 탭해도 개봉
+  if (state!=='idle') return;
+  dragging=true; dragX=e.clientX; acc=0;
+});
+addEventListener('pointermove', e=>{
+  if(!dragging || state!=='idle') return;
+  const dx = e.clientX - dragX; dragX = e.clientX;
+  knob.rotation.z -= dx*.01; acc += Math.abs(dx);
+  if (acc>8){ beep(400+acc,.03,'square',.02); acc-= 8; } // 드르륵 틱 사운드
+  if (Math.abs(knob.rotation.z) > 2.2){ dragging=false; knob.rotation.z=0; startSpin('single'); }
+});
+addEventListener('pointerup', ()=>{ dragging=false; if(state==='idle') knob.rotation.z=0; });
+
+$('#spinBtn').onclick = ()=> startSpin('single');
+$('#tenBtn').onclick  = ()=> startSpin('ten');
+
+// --- 캡슐 개봉 → 결과 UI ---
+function openCapsule(){
+  showHint(false); dropCap.visible=false; state='opened';
+  beep(880,.12,'triangle',.07); setTimeout(()=>beep(1320,.15,'triangle',.06),100);
+  pendingResult.mode==='ten' ? showGrid(pendingResult.items) : showCard(pendingResult.items[0]);
+}
+function resetToIdle(){ $('#overlay').classList.remove('show'); $('#overlay').innerHTML='';
+  state='idle'; pendingResult=null; }
+
+function showCard(item){
+  if (item.rarity==='secret'){ document.body.classList.add('shake');
+    setTimeout(()=>document.body.classList.remove('shake'),500); confetti(); }
+  else if (item.rarity==='epic'){ confetti(24,['#B07CFF','#E3D2FF']); }
+  const ov = $('#overlay');
+  ov.innerHTML = `
+    <div class="card ${item.rarity}">
+      <span class="rarity badge-${item.rarity}">${rarityKo[item.rarity]}</span>
+      <div class="art">${item.emoji}</div>
+      <h3>${item.name}</h3>
+      <div class="series">몽글프렌즈 · 별밤 시리즈</div>
+      <div class="price">정가 ${item.price.toLocaleString()}원 상품 · 보관함에 담겼어요 📦</div>
+      <div class="actions">
+        <button class="a-close" id="cClose">보관함으로</button>
+        <button class="a-again" id="cAgain">한 번 더!</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+  $('#cClose').onclick = resetToIdle;
+  $('#cAgain').onclick = ()=>{ resetToIdle(); startSpin('single'); };
+}
+
+function showGrid(items){
+  const best = items.reduce((a,b)=> rank(b.rarity)>rank(a.rarity)?b:a);
+  if (rank(best.rarity)>=2) confetti();
+  const cells = items.map((it,i)=>
+    `<div class="cell ${it.rarity}" style="animation-delay:${i*0.08}s" title="${it.name}">${it.emoji}</div>`).join('');
+  const ov = $('#overlay');
+  ov.innerHTML = `
+    <div class="grid">
+      <h3>10연 결과 ✨ 최고 등급: <span style="color:var(--r-${best.rarity})">${rarityKo[best.rarity]}</span></h3>
+      <div class="cells">${cells}</div>
+      <div class="card-actions" style="display:flex;gap:8px">
+        <button class="a-close" style="flex:1;border:none;border-radius:12px;padding:12px;font-weight:800;background:#ECEDF2" id="gClose">보관함으로</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+  items.forEach((_,i)=> setTimeout(()=>beep(500+i*60,.05,'square',.03), i*80));
+  $('#gClose').onclick = resetToIdle;
+}
+
+// --- 확률 모달: fakeServer.odds()의 "실시간 재고 기반" 수치만 표시 (하드코딩 금지 원칙) ---
+$('#oddsBtn').onclick = ()=>{
+  const rows = fakeServer.odds().map(o=>`
+    <tr><td><span class="dot" style="background:var(--r-${o.rarity})"></span>${o.emoji} ${o.name}</td>
+        <td>${o.stock}개</td><td>${o.pct.toFixed(1)}%</td></tr>`).join('');
+  const ov = $('#overlay');
+  ov.innerHTML = `
+    <div class="odds">
+      <h3>📊 확률 · 잔여 수량</h3>
+      <div class="note">실물 재고 기반 실시간 확률입니다. 뽑힐 때마다 변동돼요. (확률 = 잔여수량 ÷ 전체 잔여수량)</div>
+      <table>${rows}</table>
+      <button class="a-close" style="width:100%;margin-top:14px;border:none;border-radius:12px;padding:12px;font-weight:800;background:#ECEDF2">닫기</button>
+    </div>`;
+  ov.classList.add('show');
+  ov.querySelector('.a-close').onclick = resetToIdle;
+};
+$('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay' && state==='opened') resetToIdle();
+  else if (e.target.id==='overlay') { $('#overlay').classList.remove('show'); $('#overlay').innerHTML=''; } });
+
+// --- 골드 컨페티: DOM 조각 40개를 랜덤 낙하 (시크릿 연출) ---
+function confetti(n=40, palette=['#FFC24D','#FF5D8F','#59E3C2','#FFFFFF']){
+  const box = $('#confetti');
+  for(let i=0;i<n;i++){
+    const f = document.createElement('i');
+    f.style.left = Math.random()*100+'vw';
+    f.style.background = palette[i%palette.length];
+    f.style.animationDuration = (1.4+Math.random()*1.2)+'s';
+    f.style.transform = `rotate(${Math.random()*360}deg)`;
+    box.appendChild(f); setTimeout(()=>f.remove(), 2800);
+  }
+}
+
+refreshHUD();
+toast('레버를 옆으로 드르륵 돌려보세요! 👋');
+</script>
+</body>
+</html>

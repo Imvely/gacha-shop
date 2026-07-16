@@ -4,19 +4,27 @@
 > 항상 "지금 어디까지 왔고, 다음에 뭘 해야 하는지"만 짧게 유지한다. 히스토리는 docs/worklog/에.
 
 ## 현재 페이즈
-P1 (MVP) — 프로젝트 셋업 단계. 아직 앱 코드 없음 (기획/스키마/프로토타입만 존재).
+P1 (MVP) — 개발 1일차 완료. 모노레포 + 추첨 엔진(F-04) + 머신 목록/상세(F-03) done.
 
 ## 진행 중인 기능
-- (없음) — features.json 전부 todo
+- (없음) — 다음 기능 착수 대기
 
 ## 다음에 할 일 (우선순위순)
-1. 모노레포 스캐폴딩: apps/web (Next.js) + apps/api (FastAPI) + packages/shared
-2. [F-04] 추첨 엔진 — 스키마가 이미 설계되어 있으므로 코어부터 (서버 추첨 = 절대 원칙 1)
-3. [F-03] 머신 목록/상세 — 추첨 엔진 위에 얹기
+1. [F-05] 3D 스핀/리빌 씬 — 프리미티브 씬 우선(CLAUDE.md 6절 v1 전략),
+   POST /draws + 상세 페이지에 연결. 코인은 seed_dev.py의 데브테스터(10000코인)로 테스트
+2. [F-02] 지갑(코인)/결제 — 포트원 웹훅, 원장 역분개
+3. F-07 전에 seed 신뢰 모델 ADR (어드민 결과 예측 리스크 → 클라이언트 엔트로피 혼합 검토)
 
 ## 막힌 것 / 결정 대기
 - (없음)
 
+## 로컬 인프라 (알아둘 것)
+- 테스트/개발 DB: Docker `gacha-test-pg` (Postgres 16, 포트 55432, DB: gacha_test/gacha_dev).
+  Docker Desktop 수동 기동 필요할 수 있음. 시드: `apps/api/scripts/seed_dev.py`
+- 인증은 X-User-Id 헤더 스텁 (F-01에서 교체, `apps/api/app/deps.py`)
+- 375px 검증: `node apps/web/scripts/shot375.mjs <출력디렉>` (웹 :3000 + API :8000 필요)
+
 ## 마지막 세션 요약
-- 2026-07-17: Claude Code 하네스 구축 (commands/skills/hooks/settings, worklog 체계),
-  GitHub 원격 연결(Imvely/gacha-shop) 및 첫 푸쉬 완료
+- 2026-07-17 (개발 1일차): 모노레포 스캐폴딩, [F-04] 추첨 엔진 done(pytest 19/19,
+  20스레드 동시성·seed 커밋-리빌·402 롤백), [F-03] 머신 목록/상세 done(실데이터 확률표
+  합계 100.00%, 자동 품절, 375px 검증). 커밋 6개 푸쉬.

@@ -9,9 +9,7 @@ import {
   Instance,
   Instances,
   Lightformer,
-  MeshTransmissionMaterial,
   Preload,
-  Sparkles,
   Trail,
 } from "@react-three/drei";
 import type { ShakeController } from "@react-three/drei";
@@ -78,6 +76,37 @@ function mulberry32(seed: number) {
 const CAPSULE_COLORS = ["#FF5FA2", "#59E3C2", "#FFD166", "#5BA8FF", "#B07CFF"];
 const RARITY_ORDER: Rarity[] = ["normal", "rare", "epic", "secret"];
 
+/**
+ * 페이크 글라스 (리서치 1순위): 투명 PBR + 환경 반사 + 프레넬 가장자리 알파.
+ * 투과(transmission) 없음 = 추가 렌더 패스 0 → 버벅임 원인 제거.
+ * 캡슐은 유리 "뒤 버퍼"가 아니라 일반 렌더링이라 풀해상도로 또렷하다.
+ */
+function makeDomeGlass(side: THREE.Side, baseOpacity: number) {
+  const m = new THREE.MeshPhysicalMaterial({
+    transparent: true,
+    opacity: baseOpacity,
+    roughness: 0.06,
+    metalness: 0,
+    specularIntensity: 1,
+    envMapIntensity: 1.6,
+    side,
+    depthWrite: false,
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uFresnelPower = { value: 3.0 };
+    shader.uniforms.uFresnelAlpha = { value: 0.55 };
+    shader.fragmentShader =
+      `uniform float uFresnelPower;\nuniform float uFresnelAlpha;\n` +
+      shader.fragmentShader.replace(
+        "#include <opaque_fragment>",
+        `#include <opaque_fragment>
+         float fresnel = pow(1.0 - saturate(dot(normalize(vViewPosition), normal)), uFresnelPower);
+         gl_FragColor.a = clamp(gl_FragColor.a + fresnel * uFresnelAlpha, 0.0, 1.0);`,
+      );
+  };
+  return m;
+}
+
 function usePileLayout(count = 24) {
   return useMemo(() => {
     const rand = mulberry32(20260717);
@@ -119,6 +148,15 @@ export function GachaMachine() {
   const [burstColor, setBurstColor] = useState("#FFD166");
 
   const pile = usePileLayout();
+
+  const domeGeo = useMemo(
+    () => new THREE.SphereGeometry(1.12, 40, 28, 0, Math.PI * 2, 0, Math.PI * 0.58),
+    [],
+  );
+  const [domeBack, domeFront] = useMemo(
+    () => [makeDomeGlass(THREE.BackSide, 0.05), makeDomeGlass(THREE.FrontSide, 0.09)],
+    [],
+  );
 
   const rarity: Rarity = useMemo(() => {
     if (!results?.length) return "normal";
@@ -301,11 +339,11 @@ export function GachaMachine() {
       <pointLight position={[-3, 2, 2]} intensity={8} color="#FF5FA2" />
       <pointLight position={[3, 1, 3]} intensity={6} color="#59E3C2" />
 
-      {/* 프로시저럴 스튜디오 환경 — CDN 없이 번쩍이는 플라스틱 하이라이트 */}
+      {/* 프로시저럴 스튜디오 환경 — 유리 반사는 중립 화이트로 (유색이면 돔에 색 띠가 비친다) */}
       <Environment resolution={256}>
-        <Lightformer intensity={4} position={[0, 3, 2]} scale={[4, 1, 1]} form="rect" />
-        <Lightformer intensity={2} position={[-3, 1, -1]} scale={2} form="circle" color="#B07CFF" />
-        <Lightformer intensity={1.5} position={[3, 2, 1]} scale={2} form="circle" color="#FF5FA2" />
+        <Lightformer intensity={3.5} position={[0, 3, 2]} scale={[4, 1, 1]} form="rect" />
+        <Lightformer intensity={1.2} position={[-3, 1, -1]} scale={2} form="circle" color="#EAF0FF" />
+        <Lightformer intensity={1} position={[3, 2, 1]} scale={2} form="circle" color="#FFFFFF" />
       </Environment>
 
       {/* 원샷 카메라 셰이크 (회전 전용) — 착지/시크릿 임팩트 시 트리거 */}
@@ -325,65 +363,27 @@ export function GachaMachine() {
       )}
 
       <group ref={machineRef}>
-        {/* 바디 + 네온 밴드 + 받침 */}
+        {/* 바디 + 받침 */}
         <mesh position={[0, 0.75, 0]} castShadow={shadows}>
           <cylinderGeometry args={[1.05, 1.2, 1.5, 40]} />
           <meshStandardMaterial color="#FF5FA2" roughness={0.32} metalness={0.08} envMapIntensity={1.2} />
-        </mesh>
-        {/* 네온 밴드 — 블룸 임계값(1.0) 아래로 유지: 임계값 걸치면 스웨이 때마다
-            블룸이 점멸해 번개처럼 번쩍인다 */}
-        <mesh position={[0, 1.42, 0]}>
-          <torusGeometry args={[1.06, 0.02, 12, 48]} />
-          <meshStandardMaterial color="#FF5FA2" emissive="#FF5FA2" emissiveIntensity={0.8} />
         </mesh>
         <mesh position={[0, 0.11, 0]} receiveShadow={shadows}>
           <cylinderGeometry args={[1.3, 1.35, 0.22, 40]} />
           <meshStandardMaterial color="#2A2144" roughness={0.6} />
         </mesh>
 
-        {/* 유리 돔 — 고사양: 리얼 굴절(transmission) / 저사양: 반투명 폴백 */}
-        <mesh position={[0, 1.62, 0]}>
-          <sphereGeometry args={[1.12, 40, 28, 0, Math.PI * 2, 0, Math.PI * 0.58]} />
-          {lowFx ? (
-            <meshStandardMaterial
-              color="#BFD8FF"
-              transparent
-              opacity={0.18}
-              roughness={0.15}
-              envMapIntensity={1.5}
-              side={THREE.DoubleSide}
-            />
-          ) : (
-            /* 얇고 맑은 유리: thickness·색수차·블러를 낮춰 캡슐이 또렷하게 비치도록 */
-            <MeshTransmissionMaterial
-              samples={4}
-              resolution={384}
-              transmission={1}
-              thickness={0.12}
-              roughness={0.02}
-              chromaticAberration={0.015}
-              anisotropicBlur={0.02}
-              side={THREE.DoubleSide}
-            />
-          )}
-        </mesh>
+        {/* 유리 돔 — 페이크 글라스 (BackSide→FrontSide 순서로 얇은 쉘 반사,
+            depthWrite off + renderOrder로 캡슐 위에 블렌딩) */}
+        <group position={[0, 1.62, 0]} renderOrder={10}>
+          <mesh geometry={domeGeo} material={domeBack} />
+          <mesh geometry={domeGeo} material={domeFront} />
+        </group>
         <mesh position={[0, 1.62, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[1.09, 0.06, 14, 48]} />
           <meshStandardMaterial color="#FFF3E6" roughness={0.5} envMapIntensity={1} />
         </mesh>
 
-        {/* 돔 속 은은한 반짝임 — 크고 밝으면 번개처럼 보인다 */}
-        {!lowFx && (
-          <Sparkles
-            count={12}
-            position={[0, 1.8, 0]}
-            scale={[1.1, 0.5, 1.1]}
-            size={0.9}
-            speed={0.25}
-            opacity={0.45}
-            color="#DCE6FF"
-          />
-        )}
         {/* 돔 내부 보조광 — 캡슐 무더기 가시성 (과하면 중앙이 하얗게 탄다) */}
         <pointLight position={[0, 2.35, 0.3]} intensity={0.9} distance={2.4} color="#FFF6E8" />
 
@@ -429,9 +429,9 @@ export function GachaMachine() {
       </group>
 
       {/* 배출 캡슐 — 글로우 색 = 서버 결과의 실제 등급 (정직한 예고).
-          Trail은 낙하 중에만 마운트 (첫 로드 셰이더 부하 절감) */}
+          Trail은 상시 마운트 + Preload 선컴파일 (중간 마운트 = 셰이더 컴파일 히치) */}
       <group ref={dropRef} visible={false}>
-        {!lowFx && phase === "dropping" && (
+        {!lowFx && (
           <Trail width={1.6} length={4} decay={1.5} color={rarityColor} attenuation={(w) => w * w}>
             <group />
           </Trail>
@@ -474,6 +474,9 @@ export function GachaMachine() {
         <circleGeometry args={[2.6, 48]} />
         <meshStandardMaterial color="#1B1830" roughness={0.9} />
       </mesh>
+
+      {/* 숨겨진 오브젝트 포함 전체 셰이더 선컴파일 — 연출 중 컴파일 히치 방지 */}
+      <Preload all />
     </group>
   );
 }

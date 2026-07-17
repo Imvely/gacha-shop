@@ -40,3 +40,28 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 시크릿 연출: 화면 진동 + 골드 폭죽 (reduced-motion에선 위 규칙이 무력화) */
+@keyframes secret-shake-x {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 2px); }
+  40% { transform: translate(6px, -2px); }
+  60% { transform: translate(-4px, 1px); }
+  80% { transform: translate(4px, -1px); }
+}
+body.secret-shake {
+  animation: secret-shake-x 0.45s ease;
+}
+
+@keyframes confetti-fall {
+  to { transform: translateY(110vh) rotate(720deg); }
+}
+.confetti-piece {
+  position: absolute;
+  top: -14px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation: confetti-fall linear forwards;
+}

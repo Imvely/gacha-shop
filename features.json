@@ -35,7 +35,7 @@
       "id": "F-05", "phase": "P1", "title": "3D 스핀/리빌 씬",
       "desc": "R3F 머신 씬, 레버 드래그 → 낙하 → 캡슐 탭 개봉, 등급별 연출",
       "acceptance": ["서버 응답 이후에만 결과 연출 시작", "저사양 모드(그림자 오프) 동작", "reduced-motion 설정 존중"],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "F-06", "phase": "P1", "title": "보관함 & 묶음배송",

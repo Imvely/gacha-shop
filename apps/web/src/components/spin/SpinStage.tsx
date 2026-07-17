@@ -105,7 +105,11 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
           shadows={!lowFx}
           dpr={lowFx ? 1 : [1, 2]}
           camera={{ fov: 42, position: [0, 1.9, 6.2] }}
-          onCreated={({ camera }) => camera.lookAt(0, 1.25, 0)}
+          onCreated={({ camera, gl }) => {
+            camera.lookAt(0, 1.25, 0);
+            // 검증용: 실제 렌더러의 그림자 상태를 DOM에 노출 (verify-spin.mjs가 단언)
+            gl.domElement.dataset.shadows = String(gl.shadowMap.enabled);
+          }}
         >
           <GachaMachine />
         </Canvas>

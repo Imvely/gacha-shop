@@ -73,12 +73,30 @@ const phaseOf = (page) =>
     Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 2 });
   });
   await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="spin-stage"] canvas');
+  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]');
   results.lowFx = {
     lowfxAttr: await page.getAttribute('[data-testid="spin-stage"]', "data-lowfx"),
-    canvasRendered: (await page.locator('[data-testid="spin-stage"] canvas').count()) > 0,
+    rendererShadowsEnabled: await page.getAttribute(
+      '[data-testid="spin-stage"] canvas',
+      "data-shadows",
+    ), // "false"여야 함 — WebGL 렌더러의 실제 shadowMap 상태
   };
   await page.screenshot({ path: `${OUT}/spin-lowfx.png` });
+  await page.close();
+}
+
+// ── 2b) 대조군: 일반 사양에선 그림자 켜짐 ──────────────────────────────
+{
+  const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]');
+  results.normalFx = {
+    lowfxAttr: await page.getAttribute('[data-testid="spin-stage"]', "data-lowfx"),
+    rendererShadowsEnabled: await page.getAttribute(
+      '[data-testid="spin-stage"] canvas',
+      "data-shadows",
+    ), // "true"여야 함
+  };
   await page.close();
 }
 

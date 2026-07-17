@@ -6,6 +6,7 @@ import { RARITY_TOKENS } from "@pong/shared";
 import type { MachineDetail } from "@pong/shared";
 
 import { useSpinStore } from "@/stores/spinStore";
+import { sfx } from "@/lib/sfx";
 
 /** 결과 리빌 카드 — 서버가 준 결과를 그대로 표시. 정가 표기는 법적 가드(각인). */
 export function RevealOverlay({
@@ -44,7 +45,9 @@ export function RevealOverlay({
   }, [celebrate, item]);
 
   useEffect(() => {
-    if (open && item?.rarity === "secret" && celebrate) {
+    if (!open || !item) return;
+    sfx.fanfare(item.rarity); // 등급 팡파레 (높을수록 화려한 아르페지오)
+    if (item.rarity === "secret" && celebrate) {
       document.body.classList.add("secret-shake");
       const t = setTimeout(() => document.body.classList.remove("secret-shake"), 500);
       return () => clearTimeout(t);

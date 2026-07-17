@@ -8,10 +8,11 @@ import { ApiError, postDraw } from "@/lib/clientApi";
 /**
  * 스핀 상태머신 (절대 원칙: 연출은 결과의 후행)
  *
- *   idle → requesting → spinning → dropping → landed → opened → (reset) idle
+ *   idle → requesting → spinning → dropping → landed → opening(캡슐 팝) → opened
  *
  * 'spinning'(연출 시작)은 오직 requestSpin이 서버 응답을 저장한 뒤에만 진입한다.
  * 프론트 어디에도 결과를 결정하는 코드가 없다 — results는 항상 서버 응답 그대로.
+ * reduced-motion: requesting→landed, landed→opened (연출 단계 생략)
  */
 export type SpinPhase =
   | "idle"
@@ -19,6 +20,7 @@ export type SpinPhase =
   | "spinning"
   | "dropping"
   | "landed"
+  | "opening"
   | "opened";
 
 interface SpinState {
@@ -38,10 +40,11 @@ interface SpinState {
   reset: () => void;
 }
 
-const NEXT: Partial<Record<SpinPhase, SpinPhase>> = {
-  spinning: "dropping",
-  dropping: "landed",
-  landed: "opened",
+const ALLOWED: Partial<Record<SpinPhase, SpinPhase[]>> = {
+  spinning: ["dropping"],
+  dropping: ["landed"],
+  landed: ["opening", "opened"], // reduced-motion은 팝 연출 없이 바로 opened
+  opening: ["opened"],
 };
 
 export const useSpinStore = create<SpinState>((set, get) => ({
@@ -86,7 +89,7 @@ export const useSpinStore = create<SpinState>((set, get) => ({
   // 연출 단계 전이 — 결과(results)가 없으면 어떤 연출 단계로도 못 간다.
   advance: (from, to) => {
     const s = get();
-    if (s.phase !== from || NEXT[from] !== to || !s.results) return;
+    if (s.phase !== from || !ALLOWED[from]?.includes(to) || !s.results) return;
     set({ phase: to });
   },
 

@@ -6,6 +6,12 @@
  *  3. reduced-motion — 스핀/낙하 연출 생략, 결과 확인 흐름은 유지
  * 사용: node apps/web/scripts/verify-spin.mjs <스크린샷 출력디렉>
  * 전제: 웹 :3000, API :8000, 시드 머신 1(재고>0), 유저 1(코인 충분)
+ *   코인 충전: docker exec gacha-test-pg psql -U postgres -d gacha_dev -c
+ *     "INSERT INTO wallet_ledger (user_id, amount, reason, ref_type) VALUES (1, 100000, 'topup', 'dev')"
+ *
+ * ⚠ 헤드리스 크로뮴은 SwiftShader(소프트웨어 GL)라 transmission/블룸 셰이더 컴파일이
+ *   수십 초 걸리고 초기 프레임이 검게 찍힐 수 있다 — 단언은 전부 페이지 내부 타임스탬프
+ *   기반이라 영향 없지만, 스크린샷 화질 판단은 헤드풀(headless:false)로 할 것.
  */
 import { chromium } from "playwright";
 
@@ -17,7 +23,20 @@ const browser = await chromium.launch();
 const phaseOf = (page) =>
   page.getAttribute('[data-testid="spin-stage"]', "data-phase");
 
+// 웜업: dev 서버 첫 컴파일 + 셰이더 컴파일을 미리 치러 계측 왜곡 방지
+{
+  const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+  await page.goto(URL, { waitUntil: "networkidle", timeout: 180000 });
+  await page.waitForSelector('[data-testid="spin-button"]:not([disabled])', {
+    timeout: 120000,
+  });
+  await page.waitForTimeout(2000); // 첫 프레임 렌더/셰이더 컴파일 여유
+  await page.close();
+}
+
 // ── 1) 서버 응답 이후에만 연출 시작 ─────────────────────────────────────
+// 페이지 내부에서 fetch 완료·phase 변화의 벽시계 타임스탬프를 기록해 순서를 단언.
+// (CDP 폴링은 소프트웨어 렌더링 등 메인스레드 부하 시 늦게 읽혀 왜곡될 수 있음)
 {
   const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
   const DELAY = 2000;
@@ -25,42 +44,54 @@ const phaseOf = (page) =>
     await new Promise((r) => setTimeout(r, DELAY));
     await route.continue();
   });
-  await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="spin-button"]:not([disabled])');
+  await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
+  await page.waitForSelector('[data-testid="spin-button"]:not([disabled])', {
+    timeout: 60000,
+  });
+
+  await page.evaluate(() => {
+    window.__tl = [];
+    const el = document.querySelector('[data-testid="spin-stage"]');
+    new MutationObserver(() =>
+      window.__tl.push({ ev: "phase", phase: el.dataset.phase, t: Date.now() }),
+    ).observe(el, { attributes: true, attributeFilter: ["data-phase"] });
+    const orig = window.fetch;
+    window.fetch = (...args) =>
+      orig(...args).then((r) => {
+        if (String(args[0]).includes("/draws"))
+          window.__tl.push({ ev: "draw-response", t: Date.now() });
+        return r;
+      });
+  });
 
   const before = await phaseOf(page);
   await page.click('[data-testid="spin-button"]');
-  await page.waitForTimeout(300);
-  const during1 = await phaseOf(page); // 응답 대기 초반
-  await page.waitForTimeout(1200);
-  const during2 = await phaseOf(page); // 응답 대기 후반 (아직 지연 중)
-  await page.screenshot({ path: `${OUT}/spin-requesting.png` });
-  // 응답 도착 후 연출 시작 대기
-  await page.waitForFunction(
-    () =>
-      ["spinning", "dropping", "landed"].includes(
-        document.querySelector('[data-testid="spin-stage"]')?.dataset.phase ?? "",
-      ),
-    { timeout: DELAY + 3000 },
-  );
-  const after = await phaseOf(page);
-  await page.screenshot({ path: `${OUT}/spin-animating.png` });
-
-  // 낙하 완료 → 탭 개봉 → 리빌 카드(정가 표기)
   await page.waitForFunction(
     () =>
       document.querySelector('[data-testid="spin-stage"]')?.dataset.phase === "landed",
-    { timeout: 8000 },
+    null,
+    { timeout: 120000 },
   );
+  await page.screenshot({ path: `${OUT}/spin-animating.png` });
+
+  const tl = await page.evaluate(() => window.__tl);
+  const responseAt = tl.find((e) => e.ev === "draw-response")?.t ?? Infinity;
+  const fxPhases = ["spinning", "dropping", "landed", "opening"];
+  const phasesBeforeResponse = tl
+    .filter((e) => e.ev === "phase" && e.t <= responseAt)
+    .map((e) => e.phase);
+  const firstFxAt = tl.find((e) => e.ev === "phase" && fxPhases.includes(e.phase))?.t;
+
+  // 탭 개봉 → 리빌 카드(정가 표기)
   await page.click('[data-testid="spin-stage"] canvas');
-  await page.waitForSelector('[data-testid="reveal-card"]');
+  await page.waitForSelector('[data-testid="reveal-card"]', { timeout: 30000 });
   const cardText = await page.innerText('[data-testid="reveal-card"]');
   await page.screenshot({ path: `${OUT}/spin-reveal.png` });
 
   results.animationAfterResponseOnly = {
     before, // idle
-    duringDelay: [during1, during2], // 전부 requesting이어야 함
-    afterResponse: after, // spinning|dropping
+    phasesBeforeResponse, // ["requesting"]만 있어야 함 — 응답 전 연출 단계 0건
+    animationStartedAfterResponse: firstFxAt !== undefined && firstFxAt >= responseAt,
     revealHasRetailPrice: /정가 [\d,]+원/.test(cardText),
   };
   await page.close();
@@ -72,8 +103,10 @@ const phaseOf = (page) =>
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 2 });
   });
-  await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]');
+  await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
+  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]', {
+    timeout: 60000,
+  });
   results.lowFx = {
     lowfxAttr: await page.getAttribute('[data-testid="spin-stage"]', "data-lowfx"),
     rendererShadowsEnabled: await page.getAttribute(
@@ -88,8 +121,10 @@ const phaseOf = (page) =>
 // ── 2b) 대조군: 일반 사양에선 그림자 켜짐 ──────────────────────────────
 {
   const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
-  await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]');
+  await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
+  await page.waitForSelector('[data-testid="spin-stage"] canvas[data-shadows]', {
+    timeout: 60000,
+  });
   results.normalFx = {
     lowfxAttr: await page.getAttribute('[data-testid="spin-stage"]', "data-lowfx"),
     rendererShadowsEnabled: await page.getAttribute(
@@ -104,8 +139,10 @@ const phaseOf = (page) =>
 {
   const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto(URL, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="spin-button"]:not([disabled])');
+  await page.goto(URL, { waitUntil: "networkidle", timeout: 120000 });
+  await page.waitForSelector('[data-testid="spin-button"]:not([disabled])', {
+    timeout: 60000,
+  });
 
   const reducedAttr = await page.getAttribute(
     '[data-testid="spin-stage"]',
@@ -124,10 +161,11 @@ const phaseOf = (page) =>
   await page.waitForFunction(
     () =>
       document.querySelector('[data-testid="spin-stage"]')?.dataset.phase === "landed",
-    { timeout: 8000 },
+    null,
+    { timeout: 60000 },
   );
   await page.click('[data-testid="spin-stage"] canvas');
-  await page.waitForSelector('[data-testid="reveal-card"]');
+  await page.waitForSelector('[data-testid="reveal-card"]', { timeout: 30000 });
   await page.screenshot({ path: `${OUT}/spin-reduced.png` });
 
   results.reducedMotion = {

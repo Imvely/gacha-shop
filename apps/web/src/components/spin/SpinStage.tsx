@@ -6,8 +6,11 @@ import type { MachineDetail } from "@pong/shared";
 
 import { getBalance } from "@/lib/clientApi";
 import { useSpinStore } from "@/stores/spinStore";
+import { isMuted, setMuted, sfx } from "@/lib/sfx";
+import { haptic } from "@/lib/haptics";
 import { OddsModal } from "@/components/OddsModal";
 import { GachaMachine } from "./GachaMachine";
+import { PostFX } from "./PostFX";
 import { RevealOverlay } from "./RevealOverlay";
 
 /**
@@ -28,6 +31,9 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
   const clearError = useSpinStore((s) => s.clearError);
 
   const [remaining, setRemaining] = useState(machine.stock_remaining);
+  const [mutedState, setMutedState] = useState(false);
+
+  useEffect(() => setMutedState(isMuted()), []);
 
   useEffect(() => {
     const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -63,18 +69,27 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
   }, [machine.id, remaining, requestSpin]);
 
   // 레버 드래그: 수평 드래그 누적량이 임계치를 넘으면 스핀 (idle에서만)
-  const drag = useRef<{ x: number; acc: number } | null>(null);
+  const drag = useRef<{ x: number; acc: number; tick: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     if (phase === "landed") {
-      advance("landed", "opened");
+      // reduced-motion은 3D 팝 연출 없이 바로 결과로
+      advance("landed", reducedMotion ? "opened" : "opening");
       return;
     }
-    if (phase === "idle") drag.current = { x: e.clientX, acc: 0 };
+    if (phase === "idle") drag.current = { x: e.clientX, acc: 0, tick: 0 };
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current || phase !== "idle") return;
-    drag.current.acc += Math.abs(e.clientX - drag.current.x);
+    const dx = Math.abs(e.clientX - drag.current.x);
+    drag.current.acc += dx;
+    drag.current.tick += dx;
     drag.current.x = e.clientX;
+    if (drag.current.tick > 26) {
+      // 드르륵 — 26px마다 라쳇 틱 (리서치: 노치 단위 피드백)
+      drag.current.tick = 0;
+      sfx.ratchet();
+      haptic.tick();
+    }
     if (drag.current.acc > 140) {
       drag.current = null;
       spin();
@@ -103,18 +118,20 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
       >
         <Canvas
           shadows={!lowFx}
-          dpr={lowFx ? 1 : [1, 2]}
-          camera={{ fov: 42, position: [0, 1.9, 6.2] }}
-          onCreated={({ camera, gl }) => {
-            camera.lookAt(0, 1.25, 0);
+          dpr={lowFx ? 1 : [1, 1.5]}
+          gl={{ antialias: lowFx }} // 컴포저 사용 시 MSAA 오프 (mipmapBlur 블룸이 커버)
+          // rotation을 명시해야 CameraShake가 이 각도를 기준으로 잡는다 (lookAt은 마운트 순서에 따라 무시됨)
+          camera={{ fov: 42, position: [0, 1.9, 6.2], rotation: [-0.104, 0, 0] }}
+          onCreated={({ gl }) => {
             // 검증용: 실제 렌더러의 그림자 상태를 DOM에 노출 (verify-spin.mjs가 단언)
             gl.domElement.dataset.shadows = String(gl.shadowMap.enabled);
           }}
         >
           <GachaMachine />
+          <PostFX enabled={!lowFx} />
         </Canvas>
 
-        {/* HUD: 잔액 + 남은 캡슐 */}
+        {/* HUD: 잔액 + 남은 캡슐 + 사운드 토글 */}
         <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1 text-xs">
           <span className="rounded-full bg-black/40 px-3 py-1.5 backdrop-blur">
             🪙 <b className="font-mono text-coin">{balance ?? "—"}</b> 코인
@@ -123,6 +140,16 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
             남은 캡슐 <b className="font-mono">{remaining}</b>
           </span>
         </div>
+        <button
+          aria-label={mutedState ? "소리 켜기" : "소리 끄기"}
+          onClick={() => {
+            setMuted(!mutedState);
+            setMutedState(!mutedState);
+          }}
+          className="absolute right-3 top-3 rounded-full bg-black/40 px-3 py-1.5 text-xs backdrop-blur"
+        >
+          {mutedState ? "🔇" : "🔊"}
+        </button>
 
         {/* 상태 안내 */}
         {phase === "requesting" && (

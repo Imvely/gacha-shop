@@ -330,14 +330,11 @@ export function GachaMachine() {
           <cylinderGeometry args={[1.05, 1.2, 1.5, 40]} />
           <meshStandardMaterial color="#FF5FA2" roughness={0.32} metalness={0.08} envMapIntensity={1.2} />
         </mesh>
+        {/* 네온 밴드 — 블룸 임계값(1.0) 아래로 유지: 임계값 걸치면 스웨이 때마다
+            블룸이 점멸해 번개처럼 번쩍인다 */}
         <mesh position={[0, 1.42, 0]}>
           <torusGeometry args={[1.06, 0.02, 12, 48]} />
-          <meshStandardMaterial
-            color="#FF5FA2"
-            emissive="#FF5FA2"
-            emissiveIntensity={1.8}
-            toneMapped={false}
-          />
+          <meshStandardMaterial color="#FF5FA2" emissive="#FF5FA2" emissiveIntensity={0.8} />
         </mesh>
         <mesh position={[0, 0.11, 0]} receiveShadow={shadows}>
           <cylinderGeometry args={[1.3, 1.35, 0.22, 40]} />
@@ -357,14 +354,15 @@ export function GachaMachine() {
               side={THREE.DoubleSide}
             />
           ) : (
+            /* 얇고 맑은 유리: thickness·색수차·블러를 낮춰 캡슐이 또렷하게 비치도록 */
             <MeshTransmissionMaterial
               samples={4}
-              resolution={256}
+              resolution={384}
               transmission={1}
-              thickness={0.35}
-              roughness={0.06}
-              chromaticAberration={0.05}
-              anisotropicBlur={0.1}
+              thickness={0.12}
+              roughness={0.02}
+              chromaticAberration={0.015}
+              anisotropicBlur={0.02}
               side={THREE.DoubleSide}
             />
           )}
@@ -374,10 +372,20 @@ export function GachaMachine() {
           <meshStandardMaterial color="#FFF3E6" roughness={0.5} envMapIntensity={1} />
         </mesh>
 
-        {/* 돔 속 반짝임 */}
+        {/* 돔 속 은은한 반짝임 — 크고 밝으면 번개처럼 보인다 */}
         {!lowFx && (
-          <Sparkles count={30} position={[0, 1.85, 0]} scale={[1.6, 0.8, 1.6]} size={2} speed={0.4} color="#FFFDF7" />
+          <Sparkles
+            count={12}
+            position={[0, 1.8, 0]}
+            scale={[1.1, 0.5, 1.1]}
+            size={0.9}
+            speed={0.25}
+            opacity={0.45}
+            color="#DCE6FF"
+          />
         )}
+        {/* 돔 내부 보조광 — 캡슐 무더기 가시성 (과하면 중앙이 하얗게 탄다) */}
+        <pointLight position={[0, 2.35, 0.3]} intensity={0.9} distance={2.4} color="#FFF6E8" />
 
         {/* 배출구 + 트레이 */}
         <mesh position={[0, 0.62, 1.181]}>

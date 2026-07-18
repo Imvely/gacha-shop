@@ -53,7 +53,7 @@
       "id": "F-08", "phase": "P1", "title": "법적 가드",
       "desc": "구매 한도, 확률 고지, 스핀=청약확정 고지, 약관/CS 페이지",
       "acceptance": ["월 한도 초과 시 결제 차단", "결과 화면 정가 표기", "약관 버전 관리"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "F-09", "phase": "P2", "title": "10연 & 시크릿 확정권(천장)",

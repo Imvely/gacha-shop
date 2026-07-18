@@ -9,13 +9,56 @@ money-safety 불변식:
 """
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.constants import COIN_PACKAGES
 from app.db import begin_txn
-from app.models import Payment, WalletLedger
+from app.models import Payment, User, WalletLedger
 from app.services.pg import PgClient
+
+# 월 구매 한도 (F-08): 기본 300,000원, 유저는 이 범위에서 하향 조정만 가능
+MONTHLY_LIMIT_MAX_KRW = 300000
+MONTHLY_LIMIT_MIN_KRW = 10000
+
+
+def month_paid_total(db: Session, user_id: int) -> int:
+    """이번 달(캘린더 월) 확정(paid)된 결제 총액"""
+    return db.execute(
+        select(func.coalesce(func.sum(Payment.amount_krw), 0)).where(
+            Payment.user_id == user_id,
+            Payment.status == "paid",
+            Payment.created_at >= func.date_trunc("month", func.now()),
+        )
+    ).scalar_one()
+
+
+def _check_monthly_limit(db: Session, user: User, additional_krw: int) -> None:
+    total = month_paid_total(db, user.id)
+    if total + additional_krw > user.monthly_limit_krw:
+        raise PaymentError(
+            403,
+            f"월 구매 한도 초과 (한도 {user.monthly_limit_krw:,}원, "
+            f"이번 달 {total:,}원, 요청 {additional_krw:,}원)",
+        )
+
+
+def set_monthly_limit(db: Session, user_id: int, value: int) -> int:
+    """유저 스스로 한도 조정 — 기본 최대치(300,000원) 초과 상향은 불가."""
+    if not (MONTHLY_LIMIT_MIN_KRW <= value <= MONTHLY_LIMIT_MAX_KRW):
+        raise PaymentError(
+            422,
+            f"한도는 {MONTHLY_LIMIT_MIN_KRW:,}~{MONTHLY_LIMIT_MAX_KRW:,}원 사이여야 해요",
+        )
+    with begin_txn(db):
+        user = db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if user is None:
+            raise PaymentError(404, "존재하지 않는 유저")
+        user.monthly_limit_krw = value
+    return value
 
 
 class PaymentError(Exception):
@@ -26,12 +69,23 @@ class PaymentError(Exception):
 
 
 def create_topup(db: Session, user_id: int, package_id: str) -> Payment:
-    """충전 인텐트 생성 — 금액·코인은 서버 패키지 테이블에서만 결정."""
+    """충전 인텐트 생성 — 금액·코인은 서버 패키지 테이블에서만 결정.
+
+    월 한도 검사(F-08): 초과 시 결제창을 열기 전에 차단.
+    """
     package = COIN_PACKAGES.get(package_id)
     if package is None:
         raise PaymentError(422, "존재하지 않는 충전 패키지")
 
     with begin_txn(db):
+        user = db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if user is None:
+            raise PaymentError(404, "존재하지 않는 유저")
+        _check_monthly_limit(db, user, package["amount_krw"])
+
         payment = Payment(
             user_id=user_id,
             pg_provider="portone",
@@ -71,6 +125,14 @@ def confirm_topup(db: Session, pg: PgClient, pg_tx_id: str) -> Payment:
             raise PaymentError(400, f"PG 검증 실패 (상태: {verification.status})")
         if verification.amount_krw != payment.amount_krw:
             raise PaymentError(400, "결제 금액 불일치 — 지급 거부")
+
+        # 월 한도 이중 방어: 동시 다중 인텐트로 한도를 우회하는 경우 확정 단계에서 차단
+        # (payment는 pending 유지 → 운영이 PG 취소/환불 처리)
+        user = db.execute(
+            select(User).where(User.id == payment.user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
+        _check_monthly_limit(db, user, payment.amount_krw)
 
         payment.status = "paid"
         db.add(

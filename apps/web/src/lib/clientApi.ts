@@ -63,6 +63,22 @@ export function getPackages(): Promise<CoinPackage[]> {
   return request<CoinPackage[]>("/wallet/packages");
 }
 
+export interface LimitInfo {
+  monthly_limit_krw: number;
+  month_paid_krw: number;
+}
+
+export function getLimit(): Promise<LimitInfo> {
+  return request<LimitInfo>("/wallet/limit");
+}
+
+export function updateLimit(monthlyLimitKrw: number): Promise<LimitInfo> {
+  return request<LimitInfo>("/wallet/limit", {
+    method: "PATCH",
+    body: JSON.stringify({ monthly_limit_krw: monthlyLimitKrw }),
+  });
+}
+
 /** 충전 인텐트 생성 — 금액은 서버 패키지가 결정. 확정은 웹훅에서만. */
 export function startTopup(packageId: string): Promise<TopupResult> {
   return request<TopupResult>("/wallet/topups", {

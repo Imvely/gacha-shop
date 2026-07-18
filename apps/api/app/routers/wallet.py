@@ -8,8 +8,15 @@ from app.constants import COIN_PACKAGES
 from app.db import get_db
 from app.deps import get_current_user_id
 from app.models import Payment, WalletLedger
+from app.models import User
 from app.services.pg import FakePgClient, PgClient, get_pg_client
-from app.services.wallet_service import PaymentError, confirm_topup, create_topup
+from app.services.wallet_service import (
+    PaymentError,
+    confirm_topup,
+    create_topup,
+    month_paid_total,
+    set_monthly_limit,
+)
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -48,6 +55,45 @@ def get_balance(
         )
     ).scalar_one()
     return BalanceResponse(balance=balance)
+
+
+class LimitInfo(BaseModel):
+    monthly_limit_krw: int
+    month_paid_krw: int
+
+
+class LimitUpdate(BaseModel):
+    monthly_limit_krw: int
+
+
+@router.get("/limit", response_model=LimitInfo)
+def get_limit(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> LimitInfo:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="존재하지 않는 유저")
+    return LimitInfo(
+        monthly_limit_krw=user.monthly_limit_krw,
+        month_paid_krw=month_paid_total(db, user_id),
+    )
+
+
+@router.patch("/limit", response_model=LimitInfo)
+def patch_limit(
+    body: LimitUpdate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> LimitInfo:
+    try:
+        set_monthly_limit(db, user_id, body.monthly_limit_krw)
+    except PaymentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    return LimitInfo(
+        monthly_limit_krw=body.monthly_limit_krw,
+        month_paid_krw=month_paid_total(db, user_id),
+    )
 
 
 @router.get("/packages", response_model=list[PackageInfo])

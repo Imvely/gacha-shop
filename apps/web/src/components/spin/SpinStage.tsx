@@ -202,7 +202,10 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
         </button>
       </div>
       <p className="text-center text-[11px] text-muted">
-        스핀 확정 시 청약이 확정돼요 · 결과 실물은 보관함에 적립 후 묶음배송
+        <a href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          스핀 확정 시 청약이 확정돼요
+        </a>{" "}
+        · 결과 실물은 보관함에 적립 후 묶음배송 · 미성년자는 법정대리인 동의 필요
       </p>
 
       <RevealOverlay machine={machine} onAgain={spin} />

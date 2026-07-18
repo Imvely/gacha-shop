@@ -86,6 +86,19 @@ CREATE VIEW machine_odds AS
          ROUND(100.0 * mi.stock / NULLIF(SUM(mi.stock) OVER (PARTITION BY mi.machine_id),0), 2) AS odds_pct
   FROM machine_items mi JOIN items i ON i.id = mi.item_id;
 
+-- ---------- 재고 수정 이력 (F-07: 어드민 입출고 감사) ----------
+CREATE TABLE stock_audits (
+  id              BIGSERIAL PRIMARY KEY,
+  machine_item_id BIGINT NOT NULL REFERENCES machine_items(id),
+  delta           INT NOT NULL,          -- +입고 / -차감
+  stock_before    INT NOT NULL,
+  stock_after     INT NOT NULL,
+  reason          TEXT NOT NULL,         -- 'initial' | 'restock' | 'damage' | 'correction'
+  actor           TEXT NOT NULL,         -- 어드민 식별자 (F-01 후 user id로 대체)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_stock_audits_item ON stock_audits(machine_item_id, created_at);
+
 -- ---------- 추첨 감사 로그 ----------
 CREATE TABLE draws (
   id            BIGSERIAL PRIMARY KEY,

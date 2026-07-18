@@ -17,7 +17,7 @@ engine = create_engine(TEST_DATABASE_URL, pool_size=25, max_overflow=10)
 TestSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 ALL_TABLES = (
-    "shipment_items, trades, user_items, draws, shipments, "
+    "shipment_items, trades, user_items, draws, stock_audits, shipments, "
     "machine_items, machines, items, payments, wallet_ledger, users"
 )
 

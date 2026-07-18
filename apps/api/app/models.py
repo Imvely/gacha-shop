@@ -113,6 +113,25 @@ class MachineItem(Base):
     initial_stock: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class StockAudit(Base):
+    """재고 수정 이력 (F-07) — 모든 입출고는 이 테이블에 흔적을 남긴다."""
+
+    __tablename__ = "stock_audits"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    machine_item_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("machine_items.id"), nullable=False, index=True
+    )
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)  # +입고 / -차감
+    stock_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    stock_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)  # 'initial'|'restock'|'damage'|'correction'
+    actor: Mapped[str] = mapped_column(Text, nullable=False)  # 어드민 식별자 (F-01 후 user id)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Draw(Base):
     """추첨 감사 로그 — rng_value + stock_snapshot + 머신 seed 커밋-리빌로 재현·검증 가능."""
 

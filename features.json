@@ -47,7 +47,7 @@
       "id": "F-07", "phase": "P1", "title": "어드민: 머신/재고/출고",
       "desc": "머신 생성(상품·수량 입력 → 확률 자동계산), 입출고, 송장 일괄 처리",
       "acceptance": ["재고 수정 이력 남김", "머신 오픈 시 seed_hash 자동 생성·공개", "출고 CSV 내보내기"],
-      "status": "todo"
+      "status": "in_progress"
     },
     {
       "id": "F-08", "phase": "P1", "title": "법적 가드",

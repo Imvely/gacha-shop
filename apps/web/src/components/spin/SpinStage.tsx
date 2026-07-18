@@ -71,6 +71,8 @@ export function SpinStage({ machine }: { machine: MachineDetail }) {
   // 레버 드래그: 수평 드래그 누적량이 임계치를 넘으면 스핀 (idle에서만)
   const drag = useRef<{ x: number; acc: number; tick: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
+    // HUD 버튼(음소거 등) 클릭이 무대까지 버블링돼 캡슐이 열리는 것 방지
+    if ((e.target as HTMLElement).closest("button")) return;
     if (phase === "landed") {
       // reduced-motion은 3D 팝 연출 없이 바로 결과로
       advance("landed", reducedMotion ? "opened" : "opening");

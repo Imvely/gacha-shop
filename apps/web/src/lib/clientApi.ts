@@ -77,3 +77,64 @@ export function devCompleteTopup(pgTxId: string): Promise<TopupResult> {
     method: "POST",
   });
 }
+
+// ── 보관함 & 배송 (F-06) ────────────────────────────────────────────────
+
+export interface StorageItem {
+  user_item_id: number;
+  item_id: number;
+  name: string;
+  rarity: import("@pong/shared").Rarity;
+  retail_price: number;
+  status: "stored" | "shipping_locked" | "shipped" | "traded";
+  shipment_id: number | null;
+}
+
+export interface ShippingAddress {
+  recipient: string;
+  phone: string;
+  postcode: string;
+  address1: string;
+  address2?: string;
+}
+
+export interface ShipmentInfo {
+  id: number;
+  status: "requested" | "packed" | "shipped" | "delivered";
+  fee_krw: number;
+  tracking_no: string | null;
+  address: ShippingAddress;
+  items: StorageItem[];
+}
+
+export function getStorage(): Promise<StorageItem[]> {
+  return request<StorageItem[]>("/shipments/storage");
+}
+
+export function getShippingFee(): Promise<{ fee_coin: number; fee_krw: number }> {
+  return request<{ fee_coin: number; fee_krw: number }>("/shipments/fee");
+}
+
+export function createShipment(
+  userItemIds: number[],
+  address: ShippingAddress,
+): Promise<ShipmentInfo> {
+  return request<ShipmentInfo>("/shipments", {
+    method: "POST",
+    body: JSON.stringify({ user_item_ids: userItemIds, address }),
+  });
+}
+
+export function listShipments(): Promise<ShipmentInfo[]> {
+  return request<ShipmentInfo[]>("/shipments");
+}
+
+export function changeShipmentAddress(
+  shipmentId: number,
+  address: ShippingAddress,
+): Promise<ShipmentInfo> {
+  return request<ShipmentInfo>(`/shipments/${shipmentId}/address`, {
+    method: "PATCH",
+    body: JSON.stringify(address),
+  });
+}

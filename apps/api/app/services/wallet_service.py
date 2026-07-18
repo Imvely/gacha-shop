@@ -47,7 +47,10 @@ def create_topup(db: Session, user_id: int, package_id: str) -> Payment:
 def _locked_payment(db: Session, pg_tx_id: str) -> Payment:
     """pg_tx_id로 결제 행을 잠근다 — 동시 웹훅(중복 수신)을 직렬화."""
     payment = db.execute(
-        select(Payment).where(Payment.pg_tx_id == pg_tx_id).with_for_update()
+        select(Payment)
+        .where(Payment.pg_tx_id == pg_tx_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)  # 잠금 시점의 최신 행 강제 반영
     ).scalar_one_or_none()
     if payment is None:
         raise PaymentError(404, "알 수 없는 거래")

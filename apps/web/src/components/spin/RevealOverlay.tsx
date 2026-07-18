@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { RARITY_TOKENS } from "@pong/shared";
 import type { MachineDetail } from "@pong/shared";
@@ -22,6 +23,7 @@ export function RevealOverlay({
   const lowFx = useSpinStore((s) => s.lowFx);
   const reducedMotion = useSpinStore((s) => s.reducedMotion);
   const reset = useSpinStore((s) => s.reset);
+  const router = useRouter();
 
   const item = results?.[0];
   const token = item ? RARITY_TOKENS[item.rarity] : null;
@@ -113,7 +115,10 @@ export function RevealOverlay({
             )}
             <div className="relative mt-5 flex gap-2">
               <button
-                onClick={reset}
+                onClick={() => {
+                  reset();
+                  router.push("/storage");
+                }}
                 className="flex-1 rounded-xl bg-surface-2 px-4 py-3 text-sm font-medium"
               >
                 보관함으로

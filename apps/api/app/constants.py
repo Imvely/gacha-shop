@@ -9,6 +9,10 @@ RARITY_TOKENS = {
     "secret": {"label": "시크릿", "color": "#FFC24D"},
 }
 
+# 묶음배송 수수료 — 배송 1건당 1회만 부과 (코인 결제, 기록은 원화 병기)
+SHIPPING_FEE_COIN = 300
+SHIPPING_FEE_KRW = 3000
+
 # 코인 충전 패키지 — 금액·지급 코인은 항상 서버가 결정 (절대 원칙 6: 클라 금액 불신)
 COIN_PACKAGES = {
     "starter": {"amount_krw": 5000, "coin_amount": 500, "label": "스타터"},

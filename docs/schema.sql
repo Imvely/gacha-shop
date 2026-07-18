@@ -24,7 +24,7 @@ CREATE TABLE wallet_ledger (
   id          BIGSERIAL PRIMARY KEY,
   user_id     BIGINT NOT NULL REFERENCES users(id),
   amount      INT NOT NULL,          -- 코인 증감량. 양수=적립, 음수=사용 (0 금지)
-  reason      TEXT NOT NULL,         -- 'topup' | 'draw' | 'refund' | 'trade_in' | 'admin'
+  reason      TEXT NOT NULL,         -- 'topup' | 'draw' | 'refund' | 'trade_in' | 'shipping' | 'admin'
   ref_type    TEXT,                  -- 근거 객체 타입 ('payment','draw','trade' ...)
   ref_id      BIGINT,                -- 근거 객체 id → 모든 돈의 흐름이 원인과 연결됨
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

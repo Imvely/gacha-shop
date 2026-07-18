@@ -41,7 +41,15 @@ export default function RootLayout({
             <Link href="/" className="font-display text-2xl tracking-wide text-pong">
               PONG!
             </Link>
-            <span className="text-xs text-muted">전 머신 확률·재고 공개</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted">전 머신 확률·재고 공개</span>
+              <Link
+                href="/wallet"
+                className="rounded-full border border-line px-3 py-1.5 text-xs hover:border-pong"
+              >
+                🪙 지갑
+              </Link>
+            </div>
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-6">{children}</main>

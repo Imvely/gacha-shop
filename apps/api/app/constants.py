@@ -8,3 +8,10 @@ RARITY_TOKENS = {
     "epic": {"label": "에픽", "color": "#B07CFF"},
     "secret": {"label": "시크릿", "color": "#FFC24D"},
 }
+
+# 코인 충전 패키지 — 금액·지급 코인은 항상 서버가 결정 (절대 원칙 6: 클라 금액 불신)
+COIN_PACKAGES = {
+    "starter": {"amount_krw": 5000, "coin_amount": 500, "label": "스타터"},
+    "standard": {"amount_krw": 10000, "coin_amount": 1100, "label": "스탠다드 (+10%)"},
+    "big": {"amount_krw": 30000, "coin_amount": 3500, "label": "빅 (+16%)"},
+}

@@ -44,3 +44,36 @@ export function postDraw(machineId: number, count: 1 | 10 = 1): Promise<DrawResp
 export function getBalance(): Promise<{ balance: number }> {
   return request<{ balance: number }>("/wallet/balance");
 }
+
+export interface CoinPackage {
+  id: string;
+  label: string;
+  amount_krw: number;
+  coin_amount: number;
+}
+
+export interface TopupResult {
+  pg_tx_id: string;
+  amount_krw: number;
+  coin_amount: number;
+  status: string;
+}
+
+export function getPackages(): Promise<CoinPackage[]> {
+  return request<CoinPackage[]>("/wallet/packages");
+}
+
+/** 충전 인텐트 생성 — 금액은 서버 패키지가 결정. 확정은 웹훅에서만. */
+export function startTopup(packageId: string): Promise<TopupResult> {
+  return request<TopupResult>("/wallet/topups", {
+    method: "POST",
+    body: JSON.stringify({ package_id: packageId }),
+  });
+}
+
+/** 개발 전용: Fake PG 결제 완료 시뮬레이션 (실 PG 모드에선 404) */
+export function devCompleteTopup(pgTxId: string): Promise<TopupResult> {
+  return request<TopupResult>(`/wallet/topups/${pgTxId}/dev-complete`, {
+    method: "POST",
+  });
+}

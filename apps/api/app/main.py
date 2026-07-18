@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin, auth, draws, machines, shipments, wallet
+from app.routers import admin, auth, draws, machines, shipments, wallet, webhooks
 
 app = FastAPI(title="PONG! Gacha Shop API", version="0.1.0")
 
@@ -19,6 +19,7 @@ app.include_router(draws.router)
 app.include_router(wallet.router)
 app.include_router(shipments.router)
 app.include_router(admin.router)
+app.include_router(webhooks.router)
 
 
 @app.get("/health")

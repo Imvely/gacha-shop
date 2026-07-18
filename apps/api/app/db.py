@@ -17,3 +17,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def begin_txn(db: Session):
+    """명시적 트랜잭션 시작 — 직전 조회로 autobegin된 유휴 트랜잭션이 있으면 닫는다.
+
+    돈/재고 서비스는 호출 전 미커밋 쓰기를 들고 있지 않는 것이 규약이다
+    (조회만 있던 세션이므로 commit은 사실상 no-op).
+    """
+    if db.in_transaction():
+        db.commit()
+    return db.begin()

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/gacha"
     cors_origins: list[str] = ["http://localhost:3000"]
+    pg_provider: str = "fake"  # "fake" | "portone" — 실 키 발급 전까지 fake
 
 
 settings = Settings()
